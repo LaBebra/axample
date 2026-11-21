@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.txt
+      - name: Статичний аналіз (pylint)
+        run: pylint greenhouse tests
+
+  test:
+    # Запуск на трьох ОС підтверджує мультиплатформність (критерій C0)
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.11", "3.12"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -r requirements-dev.txt
+      - name: Тести з покриттям
+        run: pytest --cov --cov-report=term-missing --cov-report=xml
+      - name: Димовий тест CLI
+        run: |
+          python -m greenhouse --db ci.db demo
+          python -m greenhouse --db ci.db simulate 1 --steps 5 --seed 1
+          python -m greenhouse --db ci.db status 1
+      - uses: actions/upload-artifact@v4
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+        with:
+          name: coverage-report
+          path: coverage.xml
